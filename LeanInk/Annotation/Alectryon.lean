@@ -19,6 +19,15 @@ structure TypeInfo where
   type : String
   deriving ToJson
 
+instance : FromJson TypeInfo where
+  fromJson? json := do
+    let _type ← json.getObjValAs? String "_type"
+    if _type != "typeinfo" then
+      throw s!"TypeInfo _type field was: {_type} instead of 'typeinfo'"
+    let name ← json.getObjValAs? String "name"
+    let type ← json.getObjValAs? String "type"
+    return { name, type }
+
 structure Token where
   _type : String := "token"
   raw : String
@@ -26,7 +35,7 @@ structure Token where
   link : Option String := Option.none
   docstring : Option String := Option.none
   semanticType : Option String :=  Option.none
-  deriving ToJson
+  deriving ToJson, FromJson
 
 /--
   Support type for experimental --experimental-type-tokens feature
@@ -41,12 +50,29 @@ instance : ToJson Contents where
     | Contents.string v => toJson v
     | Contents.experimentalTokens v => toJson v
 
+instance : FromJson Contents where
+  fromJson? json := do
+    match json with
+    | .arr tokens => Contents.experimentalTokens <$> tokens.mapM fromJson?
+    | .str string => return Contents.string string
+    | _ => throw s!"Contents was neither string nor tokens: {json}"
+
 structure Hypothesis where
   _type : String := "hypothesis"
   names : List String
   body : String
   type : String
   deriving ToJson
+
+instance : FromJson Hypothesis where
+  fromJson? json := do
+    let _type ← json.getObjValAs? String "_type"
+    if _type != "hypothesis" then
+      throw s!"Hypothesis _type field was: {_type} instead of 'hypothesis'"
+    let names ← json.getObjValAs? (List String) "names"
+    let body ← json.getObjValAs? String "body"
+    let type ← json.getObjValAs? String "type"
+    return { names, body, type }
 
 structure Goal where
   _type : String := "goal"
@@ -55,10 +81,28 @@ structure Goal where
   hypotheses : Array Hypothesis
   deriving ToJson
 
+instance : FromJson Goal where
+  fromJson? json := do
+    let _type ← json.getObjValAs? String "_type"
+    if _type != "goal" then
+      throw s!"Goal _type field was: {_type} instead of 'goal'"
+    let name ← json.getObjValAs? String "name"
+    let conclusion ← json.getObjValAs? String "conclusion"
+    let hypotheses ← json.getObjValAs? (Array Hypothesis) "hypotheses"
+    return { name, conclusion, hypotheses }
+
 structure Message where
-  _type : String := "message"  
+  _type : String := "message"
   contents : String
   deriving ToJson
+
+instance : FromJson Message where
+  fromJson? json := do
+    let _type ← json.getObjValAs? String "_type"
+    if _type != "message" then
+      throw s!"Message _type field was: {_type} instead of 'message'"
+    let contents ← json.getObjValAs? String "contents"
+    return { contents }
 
 structure Sentence where
   _type : String := "sentence"
@@ -67,10 +111,28 @@ structure Sentence where
   goals : Array Goal
   deriving ToJson
 
+instance : FromJson Sentence where
+  fromJson? json := do
+    let _type ← json.getObjValAs? String "_type"
+    if _type != "sentence" then
+      throw s!"Sentence _type field was: {_type} instead of 'sentence'"
+    let contents ← json.getObjValAs? Contents "contents"
+    let messages ← json.getObjValAs? (Array Message) "messages"
+    let goals ← json.getObjValAs? (Array Goal) "goals"
+    return { contents, messages, goals }
+
 structure Text where
   _type : String := "text"
   contents : Contents
   deriving ToJson
+
+instance : FromJson Text where
+  fromJson? json := do
+    let _type ← json.getObjValAs? String "_type"
+    if _type != "text" then
+      throw s!"Text _type field was: {_type} instead of 'text'"
+    let contents ← json.getObjValAs? Contents "contents"
+    return { contents }
 
 /-- 
 We need a custom ToJson implementation for Alectryons fragments.
@@ -101,6 +163,16 @@ instance : ToJson Fragment where
   toJson
     | Fragment.text v => toJson v
     | Fragment.sentence v => toJson v
+
+instance : FromJson Fragment where
+  fromJson? json := do
+    if let .ok type := json.getObjVal? "_type" then
+      match type with
+      | "text" => return Fragment.text (←fromJson? json)
+      | "sentence" => return Fragment.sentence (←fromJson? json)
+      | _ => throw s!"Unkown _type for fragment: {type}"
+    else
+      throw s!"Fragment did not have _type field"
 
 /- 
   Token Generation
